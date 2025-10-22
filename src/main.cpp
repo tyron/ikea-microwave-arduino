@@ -40,10 +40,12 @@ uRTCLib rtc(0x68);
 
 // State machine definitions (mirrors pattern used in IKEA_DUKTIG_clock.ino)
 #define ShowCurrentTime   1   // current time display
-#define SetTimer   2   // user inputting timer
+#define SettingTimer   2   // user inputting timer
+#define NumberKeyPress   7   // user inputting timer
 #define ResetTimer 3   // just collon on
-#define CountDown  4
-#define Beeping    5
+#define StartTimer 4
+#define CountDown  5
+#define Beeping    6
 
 int intState = ShowCurrentTime; // current state
 int timerMinutes = 0;    // countdown minutes
@@ -125,7 +127,6 @@ void setup(){
 }
 
 void loop(){
-  static unsigned long previousDateTimeMillis = 0; // Track time for printDateTime
   static unsigned long lastKeyPressMillis = 0;    // Track time of the last key press
   static unsigned long countdownTickMillis = 0;   // Track countdown ticks
 
@@ -136,10 +137,13 @@ void loop(){
 
     switch (intState) {
       case ShowCurrentTime:
-      case SetTimer:
+      case SettingTimer:
         Serial.println("Key Pressed: " + String(key));
-        if ((key >= '0' && key <= '9') || (key == '#')) {
-          intState = SetTimer;
+        if (key >= '0' && key <= '9') {
+          intState = NumberKeyPress;
+        }
+        if (key == '#') {
+          intState = StartTimer;
         }
         if (key == '*') {
           intState = ResetTimer;
@@ -162,44 +166,52 @@ void loop(){
     case ShowCurrentTime: {
       rtc.refresh();
       displayCurrentTime(rtc.hour(), rtc.minute(), rtc.second());
+      break;
+    }
 
-      // Reset display to current time if no key press for 60 seconds when dirty,
-      // or if it was empty for 5 seconds
-      if (nonBlockingDelay(previousDateTimeMillis, 5000)) {
-        Serial.println("No key press for 5 seconds, updating display.");
+    case NumberKeyPress: {
+      if (inputNumber.length() >= 4) {
+        Serial.println("Max 4 digits reached.");
+      } else {
+        inputNumber += key;
+        Serial.println(key);
+      }
+      updateInputDisplay(inputNumber);
+
+      intState = SettingTimer;
+
+      break;
+    }
+
+    case SettingTimer: {
+      // Reset display to current time if no key press for 60 seconds
+      if (nonBlockingDelay(lastKeyPressMillis, 5000)) {
+        Serial.println("No key press for 5 seconds, resetting display.");
+        intState = ResetTimer;
       }
       break;
     }
 
-    case SetTimer: {
-      // Number entry when in ShowTime or while entering input
-      if (key >= '0' && key <= '9') {
-        if (inputNumber.length() >= 4) {
-          Serial.println("Max 4 digits reached.");
-        } else {
-          inputNumber += key;
-          Serial.println(key);
-        }
-        updateInputDisplay(inputNumber);
-      } else if (key == '#') {
-        // Start countdown when user confirms input
-        if (inputNumber.length() > 0) {
-          int totalSeconds = inputNumber.toInt();
-          timerMinutes = totalSeconds / 100;
-          timerSeconds = totalSeconds % 100;
-          // Normalize seconds > 59
-          timerMinutes += timerSeconds / 60;
-          timerSeconds = timerSeconds % 60;
+    case StartTimer: {
+      // Start countdown when user confirms input
+      if (inputNumber.length() > 0) {
+        int totalSeconds = inputNumber.toInt();
+        timerMinutes = totalSeconds / 100;
+        timerSeconds = totalSeconds % 100;
+        // Normalize seconds > 59
+        timerMinutes += timerSeconds / 60;
+        timerSeconds = timerSeconds % 60;
 
-          // Move to CountDown state
-          intState = CountDown;
-          // show initial time on display
-          updateDisplay(timerMinutes, timerSeconds);
-          // reset countdown tick timer
-          countdownTickMillis = millis();
-        }
-        inputNumber = ""; // clear input buffer regardless
+        // Move to CountDown state
+        intState = CountDown;
+
+        // show initial time on display
+        updateDisplay(timerMinutes, timerSeconds);
+
+        // reset countdown tick timer
+        countdownTickMillis = millis();
       }
+      inputNumber = ""; // clear input buffer regardless
       break;
     }
 
