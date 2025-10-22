@@ -28,6 +28,15 @@ void setup(){
   Serial.begin(9600);
 }
   
+bool nonBlockingDelay(unsigned long &previousMillis, unsigned long interval) {
+  unsigned long currentMillis = millis();
+  if (currentMillis - previousMillis >= interval) {
+    previousMillis = currentMillis;
+    return true;
+  }
+  return false;
+}
+
 void loop(){
   char key = keypad.getKey();
 
@@ -40,9 +49,7 @@ void loop(){
         int countdown = inputNumber.toInt(); // Convert the string to an integer
         unsigned long previousMillis = millis(); // Store the current time
         while (countdown >= 0) {
-          unsigned long currentMillis = millis();
-          if (currentMillis - previousMillis >= 1000) { // Check if 1 second has passed
-            previousMillis = currentMillis; // Update the previous time
+          if (nonBlockingDelay(previousMillis, 1000)) { // Check if 1 second has passed
             Serial.println(countdown);
             countdown--;
           }
