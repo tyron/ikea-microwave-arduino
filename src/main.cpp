@@ -1,6 +1,9 @@
 #include <Keypad.h>
 #include <TM1637Display.h>
 
+// https://lastminuteengineers.com/ds3231-rtc-arduino-tutorial/
+#include "uRTCLib.h"
+
 // constants for 7-segment display
 #define CLK 11
 #define DIO 10
@@ -29,7 +32,13 @@ byte colPins[COLS] = {5, 4, 3}; //connect to the column pinouts of the keypad
 Keypad keypad = Keypad( makeKeymap(keys), rowPins, colPins, ROWS, COLS );
 
 String inputNumber = ""; // Variable to store the number sequence
-  
+
+// DS3231 RTC object
+uRTCLib rtc(0x68);
+
+char daysOfTheWeek[7][12] = { "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday" };
+
+
 bool nonBlockingDelay(unsigned long &previousMillis, unsigned long interval) {
   unsigned long currentMillis = millis();
   if (currentMillis - previousMillis >= interval) {
@@ -57,10 +66,36 @@ void updateInputDisplay(const String &input) {
 }
 
 // Function to update the display in MM:SS format
-void updateDisplay(int minutes, int seconds) {
+void updateDisplay(int minutes, int seconds, bool blinkColon = false) {
   // concatenate minutes and seconds for display
   int displayTime = minutes * 100 + seconds;
-  display.showNumberDecEx(displayTime, 0b01000000, true, 4, 0);
+
+  // Define the bitmask for the colon. 0b01000000 is for the colon between digits 1 and 2.
+  // To make it flash, you can toggle this value every second.
+  uint8_t colonMask = (!blinkColon || (seconds % 2 == 0)) ? 0x40 : 0;
+
+  display.showNumberDecEx(displayTime, colonMask, true, 4, 0);
+}
+
+void printDateTime() {
+  rtc.refresh();
+  Serial.print("Date: ");
+  Serial.print(rtc.day());
+  Serial.print("/");
+  Serial.print(rtc.month());
+  Serial.print("/");
+  Serial.print(2000 + rtc.year()); // Assuming 21st century
+  Serial.print(" ");
+  Serial.print(daysOfTheWeek[rtc.dayOfWeek() - 1]);
+  Serial.print(" Time: ");
+  if (rtc.hour() < 10) Serial.print("0");
+  Serial.print(rtc.hour());
+  Serial.print(":");
+  if (rtc.minute() < 10) Serial.print("0");
+  Serial.print(rtc.minute());
+  Serial.print(":");
+  if (rtc.second() < 10) Serial.print("0");
+  Serial.println(rtc.second());
 }
 
 void setup(){
@@ -76,12 +111,29 @@ void setup(){
   display.setSegments(allON);
   delay(1000);
   display.setSegments(onlyCollon);
+
+  URTCLIB_WIRE.begin();
+
+  // Comment out below line once you set the date & time.
+  // Following line sets the RTC with an explicit date & time
+  // for example to set April 14 2025 at 12:56 you would call:
+  // rtc.set(0, 20, 14, 4, 22, 10, 25);
+  // rtc.set(second, minute, hour, dayOfWeek, dayOfMonth, month, year)
+  // set day of week (1=Sunday, 7=Saturday)
+
+
+
 }
 
 void loop(){
+  static unsigned long previousDateTimeMillis = 0; // Track time for printDateTime
+  static unsigned long lastKeyPressMillis = 0;    // Track time of the last key press
+
   char key = keypad.getKey();
 
   if (key) {
+    lastKeyPressMillis = millis(); // Update the last key press time
+
     if (key >= '0' && key <= '9') { // If the key is a number
       if (inputNumber.length() >= 4) {
         Serial.println("Max 4 digits reached.");
@@ -152,5 +204,13 @@ void loop(){
       Serial.println("Input cleared.");
       display.setSegments(onlyCollon);
     }
+  }
+
+  // Reset display to current time if no key press for 60 seconds when dirty,
+  // or if it was empty for 5 seconds
+  if (nonBlockingDelay(lastKeyPressMillis, 60000) || (inputNumber == "" && nonBlockingDelay(previousDateTimeMillis, 5000))) {
+    Serial.println("No key press for 5 seconds, updating display.");
+    rtc.refresh();
+    updateDisplay(rtc.hour(), rtc.minute(), true);
   }
 }
