@@ -46,12 +46,34 @@ void loop(){
       Serial.println(key);
     } else if (key == '#') { // If the key is '#'
       if (inputNumber.length() > 0) { // Ensure there is a number to count down from
-        int countdown = inputNumber.toInt(); // Convert the string to an integer
+        int totalSeconds = inputNumber.toInt(); // Convert the string to total seconds
+        int minutes = totalSeconds / 100; // Extract minutes
+        int seconds = totalSeconds % 100; // Extract seconds
+
+        // Adjust seconds if they exceed 59
+        minutes += seconds / 60;
+        seconds = seconds % 60;
+
         unsigned long previousMillis = millis(); // Store the current time
-        while (countdown >= 0) {
+        while (minutes > 0 || seconds > 0) {
           if (nonBlockingDelay(previousMillis, 1000)) { // Check if 1 second has passed
-            Serial.println(countdown);
-            countdown--;
+            if (seconds == 0) {
+              if (minutes > 0) {
+                minutes--;
+                seconds = 59;
+              }
+            } else {
+              seconds--;
+            }
+            if (minutes < 10) {
+              Serial.print("0"); // Add leading zero for single-digit minutes
+            }
+            Serial.print(minutes);
+            Serial.print(":");
+            if (seconds < 10) {
+              Serial.print("0"); // Add leading zero for single-digit seconds
+            }
+            Serial.println(seconds);
           }
 
           char interruptKey = keypad.getKey(); // Check for interrupt key
