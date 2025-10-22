@@ -11,6 +11,9 @@ TM1637Display display = TM1637Display(CLK, DIO);
 // Create an array that turns all segments ON
 const uint8_t allON[] = { 0xff, 0xff, 0xff, 0xff };
 
+// Create an array that displays only the collon
+const uint8_t onlyCollon[] = { 0x00, SEG_DP, 0x00, 0x00 };
+
 // constants for keypad
 const byte ROWS = 4; //four rows
 const byte COLS = 3; //three columns
@@ -26,21 +29,6 @@ byte colPins[COLS] = {5, 4, 3}; //connect to the column pinouts of the keypad
 Keypad keypad = Keypad( makeKeymap(keys), rowPins, colPins, ROWS, COLS );
 
 String inputNumber = ""; // Variable to store the number sequence
-
-void setup(){
-  Serial.begin(9600);
-
-  // Set the brightness to 5 (0=dimmest 7=brightest)
-  display.setBrightness(0);
-
-  // prints 00:00 at start
-  display.showNumberDecEx(0, 0b01000000, true, 4, 0);
-
-  // // Set all segments ON
-  // display.setSegments(allON);
-  // delay(2000);
-  // display.clear();
-}
   
 bool nonBlockingDelay(unsigned long &previousMillis, unsigned long interval) {
   unsigned long currentMillis = millis();
@@ -49,6 +37,20 @@ bool nonBlockingDelay(unsigned long &previousMillis, unsigned long interval) {
     return true;
   }
   return false;
+}
+void setup(){
+  Serial.begin(9600);
+
+  // Set the brightness to 5 (0=dimmest 7=brightest)
+  display.setBrightness(0);
+
+  // prints 00:00 at start
+  // display.showNumberDecEx(0, 0b01000000, true, 4, 0);
+
+  // Set all segments ON
+  display.setSegments(allON);
+  delay(1000);
+  display.setSegments(onlyCollon);
 }
 
 void loop(){
@@ -101,12 +103,16 @@ void loop(){
           char interruptKey = keypad.getKey(); // Check for interrupt key
           if (interruptKey == '*') { // If '*' is pressed, stop the countdown
             Serial.println("Countdown stopped.");
-            display.clear();
+            display.setSegments(onlyCollon);
             break;
           }
         }
       }
       inputNumber = ""; // Reset the input number after countdown
+    } else if (key == '*') { // If the key is '*', clear the input
+      inputNumber = "";
+      Serial.println("Input cleared.");
+      display.setSegments(onlyCollon);
     }
   }
 }
