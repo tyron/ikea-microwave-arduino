@@ -38,6 +38,31 @@ bool nonBlockingDelay(unsigned long &previousMillis, unsigned long interval) {
   }
   return false;
 }
+
+// Function to update the display based on the current input
+// Handles formatting and colon placement including cases where input has leading zeros
+// eg. "001" is shown as "0:01" (the default function would either display as "  :1" with no leading zeros or "00:01" with leading zeros)
+// Function required only during input phase as leading zeros for 4-digit are enforced in the countdown phase
+void updateInputDisplay(const String &input) {
+  uint8_t segments[4] = {0x00, 0x00, 0x00, 0x00}; // Initialize all segments to blank
+
+  int length = input.length();
+  if (length > 0 && length <= 4) {
+    for (int i = 0; i < length; i++) {
+      segments[4 - length + i] = display.encodeDigit(input[i] - '0'); // Encode digits
+    }
+    segments[1] |= SEG_DP; // Add colon at the middle
+  }
+  display.setSegments(segments);
+}
+
+// Function to update the display in MM:SS format
+void updateDisplay(int minutes, int seconds) {
+  // concatenate minutes and seconds for display
+  int displayTime = minutes * 100 + seconds;
+  display.showNumberDecEx(displayTime, 0b01000000, true, 4, 0);
+}
+
 void setup(){
   Serial.begin(9600);
 
@@ -58,9 +83,13 @@ void loop(){
 
   if (key) {
     if (key >= '0' && key <= '9') { // If the key is a number
-      inputNumber += key; // Append the number to the input string
-      Serial.println(key);
-      display.showNumberDecEx(inputNumber.toInt(), 0b01000000, false, 4, 0);
+      if (inputNumber.length() >= 4) {
+        Serial.println("Max 4 digits reached.");
+      } else {
+        inputNumber += key; // Append the number to the input string
+        Serial.println(key);
+      }
+      updateInputDisplay(inputNumber); // Update display with formatted input
     } else if (key == '#') { // If the key is '#'
       if (inputNumber.length() > 0) { // Ensure there is a number to count down from
         int totalSeconds = inputNumber.toInt(); // Convert the string to total seconds
@@ -72,8 +101,7 @@ void loop(){
         seconds = seconds % 60;
 
         // show initial time on display
-        int displayTime = minutes * 100 + seconds;
-        display.showNumberDecEx(displayTime, 0b01000000, true, 4, 0);
+        updateDisplay(minutes, seconds);
 
         unsigned long previousMillis = millis(); // Store the current time
         while (minutes > 0 || seconds > 0) {
@@ -95,9 +123,7 @@ void loop(){
               Serial.print("0"); // Add leading zero for single-digit seconds
             }
             Serial.println(seconds);
-            // concatenate minutes and seconds for display
-            int displayTime = minutes * 100 + seconds;
-            display.showNumberDecEx(displayTime, 0b01000000, true, 4, 0);
+            updateDisplay(minutes, seconds);
           }
 
           char interruptKey = keypad.getKey(); // Check for interrupt key
