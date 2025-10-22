@@ -185,7 +185,7 @@ void loop(){
 
     case SettingTimer: {
       // Reset display to current time if no key press for 60 seconds
-      if (nonBlockingDelay(lastKeyPressMillis, 5000)) {
+      if (nonBlockingDelay(lastKeyPressMillis, 60000)) {
         Serial.println("No key press for 5 seconds, resetting display.");
         intState = ResetTimer;
       }
