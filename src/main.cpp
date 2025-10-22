@@ -38,16 +38,14 @@ String inputNumber = ""; // Variable to store the number sequence
 // DS3231 RTC object
 uRTCLib rtc(0x68);
 
-char daysOfTheWeek[7][12] = { "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday" };
-
-
 // State machine definitions (mirrors pattern used in IKEA_DUKTIG_clock.ino)
-#define ShowTime  1
-#define SetTimer  2
-#define CountDown 3
-#define Beeping   4
+#define ShowCurrentTime   1   // current time display
+#define SetTimer   2   // user inputting timer
+#define ResetTimer 3   // just collon on
+#define CountDown  4
+#define Beeping    5
 
-int intState = ShowTime; // current state
+int intState = ShowCurrentTime; // current state
 int timerMinutes = 0;    // countdown minutes
 int timerSeconds = 0;    // countdown seconds
 
@@ -78,36 +76,22 @@ void updateInputDisplay(const String &input) {
 }
 
 // Function to update the display in MM:SS format
-void updateDisplay(int minutes, int seconds, bool blinkColon = false) {
+void updateDisplay(int minutes, int seconds) {
   // concatenate minutes and seconds for display
   int displayTime = minutes * 100 + seconds;
+  display.showNumberDecEx(displayTime, 0b01000000, true, 4, 0);
+}
+
+// Function to update the display in HH:MM format, blinking colon based on seconds
+void displayCurrentTime(int hours, int minutes, int seconds) {
+  // concatenate hours and minutes for display
+  int displayTime = hours * 100 + minutes;
 
   // Define the bitmask for the colon. 0b01000000 is for the colon between digits 1 and 2.
   // To make it flash, you can toggle this value every second.
-  uint8_t colonMask = (!blinkColon || (seconds % 2 == 0)) ? 0x40 : 0;
+  uint8_t colonMask = (seconds % 2 == 0) ? 0x40 : 0;
 
   display.showNumberDecEx(displayTime, colonMask, true, 4, 0);
-}
-
-void printDateTime() {
-  rtc.refresh();
-  Serial.print("Date: ");
-  Serial.print(rtc.day());
-  Serial.print("/");
-  Serial.print(rtc.month());
-  Serial.print("/");
-  Serial.print(2000 + rtc.year()); // Assuming 21st century
-  Serial.print(" ");
-  Serial.print(daysOfTheWeek[rtc.dayOfWeek() - 1]);
-  Serial.print(" Time: ");
-  if (rtc.hour() < 10) Serial.print("0");
-  Serial.print(rtc.hour());
-  Serial.print(":");
-  if (rtc.minute() < 10) Serial.print("0");
-  Serial.print(rtc.minute());
-  Serial.print(":");
-  if (rtc.second() < 10) Serial.print("0");
-  Serial.println(rtc.second());
 }
 
 void setup(){
@@ -121,13 +105,13 @@ void setup(){
 
   // Set all segments ON
   display.setSegments(allON);
-  delay(1000);
+  delay(100);
   display.setSegments(onlyCollon);
 
   URTCLIB_WIRE.begin();
 
   // Start in show time state
-  intState = ShowTime;
+  intState = ShowCurrentTime;
 
   // Comment out below line once you set the date & time.
   // Following line sets the RTC with an explicit date & time
@@ -149,58 +133,86 @@ void loop(){
   char key = keypad.getKey();
   if (key) {
     lastKeyPressMillis = millis(); // Update the last key press time
-    // Number entry when in ShowTime or while entering input
-    if (key >= '0' && key <= '9') {
-      if (inputNumber.length() >= 4) {
-        Serial.println("Max 4 digits reached.");
-      } else {
-        inputNumber += key;
-        Serial.println(key);
-      }
-      updateInputDisplay(inputNumber);
-    } else if (key == '#') {
-      // Start countdown when user confirms input
-      if (inputNumber.length() > 0) {
-        int totalSeconds = inputNumber.toInt();
-        timerMinutes = totalSeconds / 100;
-        timerSeconds = totalSeconds % 100;
-        // Normalize seconds > 59
-        timerMinutes += timerSeconds / 60;
-        timerSeconds = timerSeconds % 60;
 
-        // Move to CountDown state
-        intState = CountDown;
-        // show initial time on display
-        updateDisplay(timerMinutes, timerSeconds);
-        // reset countdown tick timer
-        countdownTickMillis = millis();
-      }
-      inputNumber = ""; // clear input buffer regardless
-    } else if (key == '*') {
-      // '*' clears input or stops countdown depending on state
-      if (intState == CountDown) {
-        // stop countdown and go back to ShowTime
-        Serial.println("Countdown stopped.");
-        display.setSegments(onlyCollon);
-        intState = ShowTime;
-      } else {
-        inputNumber = "";
-        Serial.println("Input cleared.");
-        display.setSegments(onlyCollon);
-      }
+    switch (intState) {
+      case ShowCurrentTime:
+      case SetTimer:
+        Serial.println("Key Pressed: " + String(key));
+        if ((key >= '0' && key <= '9') || (key == '#')) {
+          intState = SetTimer;
+        }
+        if (key == '*') {
+          intState = ResetTimer;
+        }
+        break;
+
+      case CountDown:
+        if (key == '*') {
+          intState = ResetTimer;
+        }
+        break;
+      case Beeping:
+        break;
     }
   }
 
   // --- Phase 2: State machine actions ---
+  // Serial.println("Current State: " + String(intState));
   switch (intState) {
-    case ShowTime: {
+    case ShowCurrentTime: {
+      rtc.refresh();
+      displayCurrentTime(rtc.hour(), rtc.minute(), rtc.second());
+
       // Reset display to current time if no key press for 60 seconds when dirty,
       // or if it was empty for 5 seconds
-      if (nonBlockingDelay(lastKeyPressMillis, 60000) || (inputNumber == "" && nonBlockingDelay(previousDateTimeMillis, 5000))) {
+      if (nonBlockingDelay(previousDateTimeMillis, 5000)) {
         Serial.println("No key press for 5 seconds, updating display.");
-        rtc.refresh();
-        updateDisplay(rtc.hour(), rtc.minute(), true);
       }
+      break;
+    }
+
+    case SetTimer: {
+      // Number entry when in ShowTime or while entering input
+      if (key >= '0' && key <= '9') {
+        if (inputNumber.length() >= 4) {
+          Serial.println("Max 4 digits reached.");
+        } else {
+          inputNumber += key;
+          Serial.println(key);
+        }
+        updateInputDisplay(inputNumber);
+      } else if (key == '#') {
+        // Start countdown when user confirms input
+        if (inputNumber.length() > 0) {
+          int totalSeconds = inputNumber.toInt();
+          timerMinutes = totalSeconds / 100;
+          timerSeconds = totalSeconds % 100;
+          // Normalize seconds > 59
+          timerMinutes += timerSeconds / 60;
+          timerSeconds = timerSeconds % 60;
+
+          // Move to CountDown state
+          intState = CountDown;
+          // show initial time on display
+          updateDisplay(timerMinutes, timerSeconds);
+          // reset countdown tick timer
+          countdownTickMillis = millis();
+        }
+        inputNumber = ""; // clear input buffer regardless
+      }
+      break;
+    }
+
+    case ResetTimer: {
+      // Show only collon
+      display.setSegments(onlyCollon);
+      // Reset timers
+      timerMinutes = 0;
+      timerSeconds = 0;
+      inputNumber = "";
+
+      // Move to ShowTime state
+      intState = ShowCurrentTime;
       break;
     }
 
@@ -243,7 +255,7 @@ void loop(){
         blinkCount++;
       }
       // After beeping go back to ShowTime
-      intState = ShowTime;
+      intState = ShowCurrentTime;
       break;
     }
   }
