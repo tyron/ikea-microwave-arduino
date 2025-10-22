@@ -133,6 +133,18 @@ void loop(){
             break;
           }
         }
+
+        // Blink 00:00 three times when countdown reaches zero
+        if (minutes == 0 && seconds == 0) {
+          int blinkCount = 0;
+          while (blinkCount < 4) {
+            display.showNumberDecEx(0, 0b01000000, true, 4, 0); // Show 00:00
+            delay(500);
+            display.setSegments(onlyCollon); // Clear display
+            delay(200);
+            blinkCount++;
+          }
+        }
       }
       inputNumber = ""; // Reset the input number after countdown
     } else if (key == '*') { // If the key is '*', clear the input
