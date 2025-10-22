@@ -1,14 +1,17 @@
-/* @file HelloKeypad.pde
-|| @version 1.0
-|| @author Alexander Brevig
-|| @contact alexanderbrevig@gmail.com
-||
-|| @description
-|| | Demonstrates the simplest use of the matrix Keypad library.
-|| #
-*/
 #include <Keypad.h>
+#include <TM1637Display.h>
 
+// constants for 7-segment display
+#define CLK 11
+#define DIO 10
+
+// Create a display object of type TM1637Display
+TM1637Display display = TM1637Display(CLK, DIO);
+
+// Create an array that turns all segments ON
+const uint8_t allON[] = { 0xff, 0xff, 0xff, 0xff };
+
+// constants for keypad
 const byte ROWS = 4; //four rows
 const byte COLS = 3; //three columns
 char keys[ROWS][COLS] = {
@@ -26,6 +29,17 @@ String inputNumber = ""; // Variable to store the number sequence
 
 void setup(){
   Serial.begin(9600);
+
+  // Set the brightness to 5 (0=dimmest 7=brightest)
+  display.setBrightness(0);
+
+  // prints 00:00 at start
+  display.showNumberDecEx(0, 0b01000000, true, 4, 0);
+
+  // // Set all segments ON
+  // display.setSegments(allON);
+  // delay(2000);
+  // display.clear();
 }
   
 bool nonBlockingDelay(unsigned long &previousMillis, unsigned long interval) {
@@ -44,6 +58,7 @@ void loop(){
     if (key >= '0' && key <= '9') { // If the key is a number
       inputNumber += key; // Append the number to the input string
       Serial.println(key);
+      display.showNumberDecEx(inputNumber.toInt(), 0b01000000, false, 4, 0);
     } else if (key == '#') { // If the key is '#'
       if (inputNumber.length() > 0) { // Ensure there is a number to count down from
         int totalSeconds = inputNumber.toInt(); // Convert the string to total seconds
@@ -53,6 +68,10 @@ void loop(){
         // Adjust seconds if they exceed 59
         minutes += seconds / 60;
         seconds = seconds % 60;
+
+        // show initial time on display
+        int displayTime = minutes * 100 + seconds;
+        display.showNumberDecEx(displayTime, 0b01000000, true, 4, 0);
 
         unsigned long previousMillis = millis(); // Store the current time
         while (minutes > 0 || seconds > 0) {
@@ -74,11 +93,15 @@ void loop(){
               Serial.print("0"); // Add leading zero for single-digit seconds
             }
             Serial.println(seconds);
+            // concatenate minutes and seconds for display
+            int displayTime = minutes * 100 + seconds;
+            display.showNumberDecEx(displayTime, 0b01000000, true, 4, 0);
           }
 
           char interruptKey = keypad.getKey(); // Check for interrupt key
           if (interruptKey == '*') { // If '*' is pressed, stop the countdown
             Serial.println("Countdown stopped.");
+            display.clear();
             break;
           }
         }
