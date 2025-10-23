@@ -40,12 +40,12 @@ uRTCLib rtc(0x68);
 
 // State machine definitions (mirrors pattern used in IKEA_DUKTIG_clock.ino)
 #define ShowCurrentTime   1   // current time display
-#define SettingTimer   2   // user inputting timer
-#define NumberKeyPress   7   // user inputting timer
-#define ResetTimer 3   // just collon on
-#define StartTimer 4
-#define CountDown  5
-#define Beeping    6
+#define UserSettingTimer   2   // user inputting timer
+#define NumberKeyPress   3   // user clicked a number key
+#define ResetTimer 4   // just collon on
+#define StartTimer 5
+#define CountDown  6
+#define Beeping    7
 
 int intState = ShowCurrentTime; // current state
 int timerMinutes = 0;    // countdown minutes
@@ -137,7 +137,7 @@ void loop(){
 
     switch (intState) {
       case ShowCurrentTime:
-      case SettingTimer:
+      case UserSettingTimer:
         Serial.println("Key Pressed: " + String(key));
         if (key >= '0' && key <= '9') {
           intState = NumberKeyPress;
@@ -178,12 +178,12 @@ void loop(){
       }
       updateInputDisplay(inputNumber);
 
-      intState = SettingTimer;
+      intState = UserSettingTimer;
 
       break;
     }
 
-    case SettingTimer: {
+    case UserSettingTimer: {
       // Reset display to current time if no key press for 60 seconds
       if (nonBlockingDelay(lastKeyPressMillis, 60000)) {
         Serial.println("No key press for 5 seconds, resetting display.");
@@ -210,6 +210,9 @@ void loop(){
 
         // reset countdown tick timer
         countdownTickMillis = millis();
+      } else {
+        // No input, return to UserSettingTimer state
+        intState = UserSettingTimer;
       }
       inputNumber = ""; // clear input buffer regardless
       break;
