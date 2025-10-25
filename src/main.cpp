@@ -5,6 +5,7 @@
 
 // https://lastminuteengineers.com/ds3231-rtc-arduino-tutorial/
 #include "uRTCLib.h"
+#include "timer_logic.h"
 
 // constants for 7-segment display
 #define CLK 11
@@ -49,17 +50,6 @@ uRTCLib rtc(0x68);
 int intState = ShowCurrentTime; // current state
 int timerMinutes = 0;           // countdown minutes
 int timerSeconds = 0;           // countdown seconds
-
-bool nonBlockingDelay(unsigned long &previousMillis, unsigned long interval)
-{
-  unsigned long currentMillis = millis();
-  if (currentMillis - previousMillis >= interval)
-  {
-    previousMillis = currentMillis;
-    return true;
-  }
-  return false;
-}
 
 // Function to update the display based on the current input
 // Handles formatting and colon placement including cases where input has leading zeros
@@ -216,21 +206,26 @@ void loop()
     // Start countdown when user confirms input
     if (inputNumber.length() > 0)
     {
-      int totalSeconds = inputNumber.toInt();
-      timerMinutes = totalSeconds / 100;
-      timerSeconds = totalSeconds % 100;
-      // Normalize seconds > 59
-      timerMinutes += timerSeconds / 60;
-      timerSeconds = timerSeconds % 60;
+      TimerValue timer = parseTimerInput(inputNumber.c_str());
+      if (timer.valid)
+      {
+        timerMinutes = timer.minutes;
+        timerSeconds = timer.seconds;
 
-      // Move to CountDown state
-      intState = CountDown;
+        // Move to CountDown state
+        intState = CountDown;
 
-      // show initial time on display
-      updateDisplay(timerMinutes, timerSeconds);
+        // show initial time on display
+        updateDisplay(timerMinutes, timerSeconds);
 
-      // reset countdown tick timer
-      countdownTickMillis = millis();
+        // reset countdown tick timer
+        countdownTickMillis = millis();
+      }
+      else
+      {
+        // Invalid input, return to UserSettingTimer state
+        intState = UserSettingTimer;
+      }
     }
     else
     {
@@ -260,18 +255,8 @@ void loop()
     // Tick countdown every second (non-blocking)
     if (nonBlockingDelay(countdownTickMillis, 1000))
     {
-      if (timerSeconds == 0)
-      {
-        if (timerMinutes > 0)
-        {
-          timerMinutes--;
-          timerSeconds = 59;
-        }
-      }
-      else
-      {
-        timerSeconds--;
-      }
+      bool timerFinished = decrementTimer(timerMinutes, timerSeconds);
+
       if (timerMinutes < 10)
         Serial.print("0");
       Serial.print(timerMinutes);
@@ -280,15 +265,15 @@ void loop()
         Serial.print("0");
       Serial.println(timerSeconds);
       updateDisplay(timerMinutes, timerSeconds);
+
+      // When countdown reaches zero, transition to Beeping
+      if (timerFinished)
+      {
+        intState = Beeping;
+      }
     }
 
     // Allow '*' to interrupt is handled in Phase 1 input processing above
-
-    // When countdown reaches zero, transition to Beeping
-    if (timerMinutes == 0 && timerSeconds == 0)
-    {
-      intState = Beeping;
-    }
     break;
   }
 
