@@ -17,18 +17,18 @@ char keys[ROWS][COLS] = {
     {'4', '5', '6'},
     {'7', '8', '9'},
     {'*', '0', '#'}};
-byte rowPins[ROWS] = {9, 8, 7, 6}; // connect to the row pinouts of the keypad
-byte colPins[COLS] = {5, 4, 3};    // connect to the column pinouts of the keypad
+byte rowPins[ROWS] = {8, 7, 6, 5}; // connect to the row pinouts of the keypad
+byte colPins[COLS] = {4, 3, 2};    // connect to the column pinouts of the keypad
 
 // ***** Output pins *****
-// Buzzer
-const  uint8_t  BuzzerPin = 12;
-
 // TM1637 clock pin
-const  uint8_t  TM1637CLKPin = 11;
+const  uint8_t  TM1637CLKPin = 9;
 
 // TM1637 data pin
 const  uint8_t  TM1637DataPin = 10;
+
+// Buzzer
+const  uint8_t  BuzzerPin = 11;
 
 // ***** Keypad segment definitions *****
 
