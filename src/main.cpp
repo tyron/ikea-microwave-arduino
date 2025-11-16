@@ -37,6 +37,86 @@ String inputNumber = ""; // Variable to store the number sequence
 // DS3231 RTC object
 uRTCLib rtc(0x68);
 
+// DST calculation helper functions
+// Calculates the day of month for the Nth occurrence of a weekday
+// weekday: 1=Sunday, 7=Saturday
+int getNthWeekdayOfMonth(int year, int month, int weekday, int n) {
+  // Find the first day of the month's day of week
+  // Using Zeller's congruence for day of week calculation
+  int q = 1; // day of month (1st)
+  int m = month;
+  int y = year;
+
+  if (m < 3) {
+    m += 12;
+    y--;
+  }
+
+  int k = y % 100;
+  int j = y / 100;
+  int h = (q + ((13 * (m + 1)) / 5) + k + (k / 4) + (j / 4) - (2 * j)) % 7;
+
+  // Convert Zeller's result (0=Saturday) to our format (1=Sunday)
+  int firstDayOfWeek = ((h + 6) % 7) + 1;
+
+  // Calculate which day of the month the nth occurrence falls on
+  int offset = (weekday - firstDayOfWeek + 7) % 7;
+  int nthDay = 1 + offset + (n - 1) * 7;
+
+  return nthDay;
+}
+
+// Check if DST is active for Eastern Time
+// DST: Second Sunday in March at 2:00 AM through first Sunday in November at 2:00 AM
+bool isDST(int year, int month, int day, int hour) {
+  // DST starts second Sunday in March
+  int marchStart = getNthWeekdayOfMonth(year, 3, 1, 2); // 2nd Sunday of March
+
+  // DST ends first Sunday in November
+  int novemberEnd = getNthWeekdayOfMonth(year, 11, 1, 1); // 1st Sunday of November
+
+  // Before March or after November - definitely EST
+  if (month < 3 || month > 11) return false;
+  if (month > 3 && month < 11) return true;
+
+  // In March - check if we're past the transition
+  if (month == 3) {
+    if (day < marchStart) return false;
+    if (day > marchStart) return true;
+    // On transition day, check hour (2 AM transition)
+    return hour >= 2;
+  }
+
+  // In November - check if we're before the transition
+  if (month == 11) {
+    if (day < novemberEnd) return true;
+    if (day > novemberEnd) return false;
+    // On transition day, check hour (2 AM transition)
+    return hour < 2;
+  }
+
+  return false;
+}
+
+// Apply EST/EDT offset to UTC time stored in RTC
+void applyEasternTimeOffset(int &hour, int &day, int month, int year) {
+  // Determine offset: EST = UTC-5, EDT = UTC-4
+  int offset = isDST(year, month, day, hour) ? -4 : -5;
+
+  hour += offset;
+
+  // Handle day rollover
+  if (hour < 0) {
+    hour += 24;
+    day--;
+    // Note: We don't handle month/year rollback as it's edge case for display only
+  } else if (hour >= 24) {
+    hour -= 24;
+    day++;
+    // Note: We don't handle month/year rollover as it's edge case for display only
+  }
+}
+
 // State machine definitions
 enum State {
   SHOW_CURRENT_TIME,    // Display current time from RTC
@@ -199,7 +279,12 @@ void executeState()
   {
   case SHOW_CURRENT_TIME:
     rtc.refresh();
-    displayCurrentTime(rtc.hour(), rtc.minute(), rtc.second());
+    {
+      int adjustedHour = rtc.hour();
+      int adjustedDay = rtc.day();
+      applyEasternTimeOffset(adjustedHour, adjustedDay, rtc.month(), rtc.year());
+      displayCurrentTime(adjustedHour, rtc.minute(), rtc.second());
+    }
     break;
 
   case WAITING_INPUT:
@@ -281,17 +366,31 @@ void setup()
   delay(100);
   display.setSegments(onlyCollon);
 
+  // Initialize I2C bus for RTC communication
   URTCLIB_WIRE.begin();
 
   // Start in show time state
   currentState = SHOW_CURRENT_TIME;
 
-  // Comment out below line once you set the date & time.
+  // Comment out below line once you set the date & time (set the time as UTC)
   // Following line sets the RTC with an explicit date & time
   // for example to set April 14 2025 at 12:56 you would call:
-  // rtc.set(0, 39, 22, 7, 25, 10, 25);
   // rtc.set(second, minute, hour, dayOfWeek, dayOfMonth, month, year)
+  // rtc.set(0, 43, 3, 1, 16, 11, 25);
   // set day of week (1=Sunday, 7=Saturday)
+  Serial.println("Current RTC Date and Time (UTC):");
+  rtc.refresh();
+  Serial.print(rtc.day());
+  Serial.print("/");
+  Serial.print(rtc.month());
+  Serial.print("/");
+  Serial.print(rtc.year());
+  Serial.print(" ");
+  Serial.print(rtc.hour());
+  Serial.print(":");
+  Serial.print(rtc.minute());
+  Serial.print(":");
+  Serial.println(rtc.second());
 }
 
 void loop()
