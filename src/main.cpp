@@ -6,20 +6,10 @@
 // https://lastminuteengineers.com/ds3231-rtc-arduino-tutorial/
 #include "uRTCLib.h"
 
-// constants for 7-segment display
-#define CLK 11
-#define DIO 10
 
-// Create a display object of type TM1637Display
-TM1637Display display = TM1637Display(CLK, DIO);
+// Definition of all digital pins
 
-// Create an array that turns all segments ON
-const uint8_t allON[] = {0xff, 0xff, 0xff, 0xff};
-
-// Create an array that displays only the collon
-const uint8_t onlyCollon[] = {0x00, SEG_DP, 0x00, 0x00};
-
-// constants for keypad
+// ***** Keypad input pins *****
 const byte ROWS = 4; // four rows
 const byte COLS = 3; // three columns
 char keys[ROWS][COLS] = {
@@ -30,12 +20,51 @@ char keys[ROWS][COLS] = {
 byte rowPins[ROWS] = {9, 8, 7, 6}; // connect to the row pinouts of the keypad
 byte colPins[COLS] = {5, 4, 3};    // connect to the column pinouts of the keypad
 
-Keypad keypad = Keypad(makeKeymap(keys), rowPins, colPins, ROWS, COLS);
+// ***** Output pins *****
+// Buzzer
+const  uint8_t  BuzzerPin = 12;
 
-String inputNumber = ""; // Variable to store the number sequence
+// TM1637 clock pin
+const  uint8_t  TM1637CLKPin = 11;
+
+// TM1637 data pin
+const  uint8_t  TM1637DataPin = 10;
+
+// ***** Keypad segment definitions *****
+
+// Create an array that turns all segments ON
+const uint8_t allON[] = {0xff, 0xff, 0xff, 0xff};
+
+// Create an array that displays only the collon
+const uint8_t onlyCollon[] = {0x00, SEG_DP, 0x00, 0x00};
+
+// ***** Objects *****
+
+// Create a display object of type TM1637Display
+TM1637Display display = TM1637Display(TM1637CLKPin, TM1637DataPin);
+
+Keypad keypad = Keypad(makeKeymap(keys), rowPins, colPins, ROWS, COLS);
 
 // DS3231 RTC object
 uRTCLib rtc(0x68);
+
+// ***** Variables *****
+
+// State machine definitions
+enum State {
+  SHOW_CURRENT_TIME,    // Display current time from RTC
+  WAITING_INPUT,        // Waiting for input (colon only)
+  SETTING_TIMER,        // User is entering timer digits
+  COUNTDOWN,            // Timer is actively counting down
+  COMPLETE              // Timer finished, beeping/blinking
+};
+
+State currentState = SHOW_CURRENT_TIME;
+int timerMinutes = 0;           // countdown minutes
+int timerSeconds = 0;           // countdown seconds
+unsigned long countdownTickMillis = 0; // Timer for countdown ticks
+String inputNumber = ""; // Variable to store the number sequence
+
 
 // DST calculation helper functions
 // Calculates the day of month for the Nth occurrence of a weekday
@@ -117,19 +146,6 @@ void applyEasternTimeOffset(int &hour, int &day, int month, int year) {
   }
 }
 
-// State machine definitions
-enum State {
-  SHOW_CURRENT_TIME,    // Display current time from RTC
-  WAITING_INPUT,        // Waiting for input (colon only)
-  SETTING_TIMER,        // User is entering timer digits
-  COUNTDOWN,            // Timer is actively counting down
-  COMPLETE              // Timer finished, beeping/blinking
-};
-
-State currentState = SHOW_CURRENT_TIME;
-int timerMinutes = 0;           // countdown minutes
-int timerSeconds = 0;           // countdown seconds
-unsigned long countdownTickMillis = 0; // Timer for countdown ticks
 
 bool nonBlockingDelay(unsigned long &previousMillis, unsigned long interval)
 {
@@ -339,8 +355,11 @@ void executeState()
     int blinkCount = 0;
     while (blinkCount < 4)
     {
+      digitalWrite(BuzzerPin, HIGH);
       display.showNumberDecEx(0, 0b01000000, true, 4, 0); // Show 00:00
       delay(500);
+
+      digitalWrite(BuzzerPin, LOW);
       display.setSegments(onlyCollon); // Clear display
       delay(200);
       blinkCount++;
@@ -355,6 +374,8 @@ void setup()
 {
   Serial.begin(9600);
 
+  // Setup display
+
   // Set the brightness to 5 (0=dimmest 7=brightest)
   display.setBrightness(0);
 
@@ -365,6 +386,8 @@ void setup()
   display.setSegments(allON);
   delay(100);
   display.setSegments(onlyCollon);
+
+  // Setup RTC
 
   // Initialize I2C bus for RTC communication
   URTCLIB_WIRE.begin();
@@ -391,6 +414,9 @@ void setup()
   Serial.print(rtc.minute());
   Serial.print(":");
   Serial.println(rtc.second());
+
+  // Setup buzzer
+  pinMode(BuzzerPin,  OUTPUT);
 }
 
 void loop()
