@@ -299,8 +299,6 @@ void handleInput()
 
           // Reset LED animation
           ledTickMillis = millis();
-          ring.clear();
-          ring.show();
         }
       }
       else if (key == '*')
@@ -311,10 +309,6 @@ void handleInput()
         timerSeconds = 0;
         display.setSegments(onlyCollon);
         currentState = SHOW_CURRENT_TIME;
-
-        // Restore LEDs
-        ring.clear();
-        ring.show();
       }
       break;
 
@@ -327,9 +321,6 @@ void handleInput()
         timerSeconds = 0;
         display.setSegments(onlyCollon);
         currentState = SHOW_CURRENT_TIME;
-
-        ring.clear();
-        ring.show();
       }
       break;
 
@@ -415,16 +406,15 @@ void executeState()
       if (timerMinutes == 0 && timerSeconds == 0)
       {
         currentState = COMPLETE;
-
-        // Restore LEDs
-        ring.clear();
-        ring.show();
       }
     }
     break;
 
   case COMPLETE:
   {
+    ring.fill(ring.ColorHSV(4000L, 255, 50)); // Fill with Yellow color for complete indication
+    ring.show();
+
     // Blink 00:00 four times
     int blinkCount = 0;
     while (blinkCount < 4)
