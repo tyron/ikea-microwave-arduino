@@ -1,4 +1,5 @@
 #include <Arduino.h>
+#include "hsv.h"
 
 #include <Keypad.h>
 #include <TM1637Display.h>
@@ -6,6 +7,7 @@
 // https://lastminuteengineers.com/ds3231-rtc-arduino-tutorial/
 #include "uRTCLib.h"
 
+#include <Adafruit_NeoPixel.h>
 
 // Definition of all digital pins
 
@@ -30,6 +32,12 @@ const  uint8_t  TM1637DataPin = 10;
 // Buzzer
 const  uint8_t  BuzzerPin = 11;
 
+// Which pin on the Arduino is connected to the NeoPixels?
+const uint8_t  NeoPixelPin = 13;
+
+// How many NeoPixels are attached to the Arduino?
+const uint8_t  NeoPixelCount = 24;
+
 // ***** Keypad segment definitions *****
 
 // Create an array that turns all segments ON
@@ -48,6 +56,8 @@ Keypad keypad = Keypad(makeKeymap(keys), rowPins, colPins, ROWS, COLS);
 // DS3231 RTC object
 uRTCLib rtc(0x68);
 
+Adafruit_NeoPixel pixels(NeoPixelCount, NeoPixelPin, NEO_GRB + NEO_KHZ800);
+
 // ***** Variables *****
 
 // State machine definitions
@@ -63,6 +73,8 @@ State currentState = SHOW_CURRENT_TIME;
 int timerMinutes = 0;           // countdown minutes
 int timerSeconds = 0;           // countdown seconds
 unsigned long countdownTickMillis = 0; // Timer for countdown ticks
+unsigned long ledTickMillis = 0; // Timer for LED animation
+int ledIndex = 0; // Current LED position
 String inputNumber = ""; // Variable to store the number sequence
 
 
@@ -244,6 +256,12 @@ void handleInput()
           updateDisplay(timerMinutes, timerSeconds);
           // Reset countdown tick timer to start fresh
           countdownTickMillis = millis();
+
+          // Reset LED animation
+          ledTickMillis = millis();
+          ledIndex = 0;
+          pixels.clear();
+          pixels.show();
         }
       }
       else if (key == '*')
@@ -254,6 +272,10 @@ void handleInput()
         timerSeconds = 0;
         display.setSegments(onlyCollon);
         currentState = SHOW_CURRENT_TIME;
+
+        // Restore LEDs
+        pixels.clear();
+        pixels.show();
       }
       break;
 
@@ -266,6 +288,9 @@ void handleInput()
         timerSeconds = 0;
         display.setSegments(onlyCollon);
         currentState = SHOW_CURRENT_TIME;
+
+        pixels.clear();
+        pixels.show();
       }
       break;
 
@@ -314,6 +339,15 @@ void executeState()
     break;
 
   case COUNTDOWN:
+    // LED Animation
+    if (nonBlockingDelay(ledTickMillis, 50))
+    {
+      pixels.clear();
+      pixels.setPixelColor(ledIndex, pixels.Color(0, 150, 0));
+      pixels.show();
+      ledIndex = (ledIndex + 1) % NeoPixelCount;
+    }
+
     // Tick countdown every second (non-blocking)
     if (nonBlockingDelay(countdownTickMillis, 1000))
     {
@@ -345,6 +379,10 @@ void executeState()
       if (timerMinutes == 0 && timerSeconds == 0)
       {
         currentState = COMPLETE;
+
+        // Restore LEDs
+        pixels.clear();
+        pixels.show();
       }
     }
     break;
@@ -355,11 +393,11 @@ void executeState()
     int blinkCount = 0;
     while (blinkCount < 4)
     {
-      digitalWrite(BuzzerPin, HIGH);
+      // digitalWrite(BuzzerPin, HIGH);
       display.showNumberDecEx(0, 0b01000000, true, 4, 0); // Show 00:00
       delay(500);
 
-      digitalWrite(BuzzerPin, LOW);
+      // digitalWrite(BuzzerPin, LOW);
       display.setSegments(onlyCollon); // Clear display
       delay(200);
       blinkCount++;
@@ -417,10 +455,41 @@ void setup()
 
   // Setup buzzer
   pinMode(BuzzerPin,  OUTPUT);
+
+  Serial.println("Setting up NeoPixels...");
+  // Setup NeoPixels
+  pixels.begin(); // Initialize NeoPixel library
+  pixels.show();  // Initialize all pixels to 'off'
+  Serial.println("NeoPixels setup complete.");
 }
+
+#define MAXHUE 256*6
+
+int position = 0;
+
 
 void loop()
 {
+  // Based on https://github.com/RoboUlbricht/arduinoslovakia/blob/master/neopixel/hsv_red_circle_rotate/hsv_red_circle_rotate.ino
+  for (int i = 0; i < NeoPixelCount; i++) {
+    // Rainbow
+    // pixels.setPixelColor((i + position) % CNT, getPixelColorHsv(i, i * (MAXHUE / CNT), 255, 10));
+    // Warm Yellow: Hue 192 (scale 0-1536), Saturation 255
+    pixels.setPixelColor((i + position) % NeoPixelCount, getPixelColorHsv(i, 125, 255, pixels.gamma8(i * (255 / NeoPixelCount))));
+  }
+  pixels.show();
+  position++;
+  position %= NeoPixelCount;
+  delay(50);
+
+  // generate a list of valuess 100, 200, 300, 400
+
+  // for (int i = 0; i < NeoPixelCount; i++) {
+  //   pixels.setPixelColor((i + position) % NeoPixelCount, getPixelColorHsv(i, 125, 255, pixels.gamma8(i * (255 / NeoPixelCount))));
+  // }
+  // pixels.show();
+  // delay(400);
+  
   // --- State Machine Implementation ---
   handleInput();
   executeState();
