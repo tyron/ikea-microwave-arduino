@@ -6,6 +6,7 @@
 // https://lastminuteengineers.com/ds3231-rtc-arduino-tutorial/
 #include "uRTCLib.h"
 
+#include <Adafruit_NeoPixel.h>
 
 // Definition of all digital pins
 
@@ -30,6 +31,12 @@ const  uint8_t  TM1637DataPin = 10;
 // Buzzer
 const  uint8_t  BuzzerPin = 11;
 
+// Which pin on the Arduino is connected to the NeoPixels?
+const uint8_t  NeoPixelPin = 13;
+
+// How many NeoPixels are attached to the Arduino?
+const uint8_t  NeoPixelCount = 24;
+
 // ***** Keypad segment definitions *****
 
 // Create an array that turns all segments ON
@@ -48,6 +55,49 @@ Keypad keypad = Keypad(makeKeymap(keys), rowPins, colPins, ROWS, COLS);
 // DS3231 RTC object
 uRTCLib rtc(0x68);
 
+// Rotator class based on https://www.arduinoslovakia.eu/blog/2021/10/neopixel-ring-rotator?lang=en
+// to create a rotating color pattern on the NeoPixel ring
+// for high-level orchestration of Rotating pattern
+// For more patterns or low-level code, reference https://github.com/RoboUlbricht/arduinoslovakia/blob/master/neopixel/hsv_red_circle_rotate/hsv_red_circle_rotate.ino
+class Rotator
+{
+    Adafruit_NeoPixel *strip;
+    int position;
+    uint16_t hue;
+    uint8_t saturation;
+
+  public:
+    Rotator(Adafruit_NeoPixel *npx, int pos = 0, uint16_t h = 0, uint8_t sat = 255);
+    void Step();
+};
+
+Rotator::Rotator(Adafruit_NeoPixel *npx, int pos, uint16_t h, uint8_t sat)
+  : strip(npx), position(pos), hue(h), saturation(sat)
+{
+}
+
+void Rotator::Step()
+{
+  // hue - 0-65535
+  // saturation - 0-255
+  // value - 0-255
+  for (int i = 0; i < NeoPixelCount; i++)
+    strip->setPixelColor(
+      (i + position) % NeoPixelCount,
+      strip->ColorHSV(hue, saturation, strip->gamma8(i * (255 / NeoPixelCount)))
+    );
+  strip->show();
+  position++;
+  position %= NeoPixelCount;
+}
+
+Adafruit_NeoPixel ring(NeoPixelCount, NeoPixelPin, NEO_GRB + NEO_KHZ800);
+
+// Rotator rt(&ring, 0, 0, 255); // red
+// Rotator rt(&ring, 0, 0, 200); // pink
+// Rotator rt(&ring, 0, 40000L, 200); // lightblue
+Rotator rt(&ring, 0, 4000L, 255); // yellow
+
 // ***** Variables *****
 
 // State machine definitions
@@ -63,6 +113,8 @@ State currentState = SHOW_CURRENT_TIME;
 int timerMinutes = 0;           // countdown minutes
 int timerSeconds = 0;           // countdown seconds
 unsigned long countdownTickMillis = 0; // Timer for countdown ticks
+unsigned long ledTickMillis = 0; // Timer for LED animation
+int ledIndex = 0; // Current LED position
 String inputNumber = ""; // Variable to store the number sequence
 
 
@@ -244,6 +296,9 @@ void handleInput()
           updateDisplay(timerMinutes, timerSeconds);
           // Reset countdown tick timer to start fresh
           countdownTickMillis = millis();
+
+          // Reset LED animation
+          ledTickMillis = millis();
         }
       }
       else if (key == '*')
@@ -314,6 +369,12 @@ void executeState()
     break;
 
   case COUNTDOWN:
+    // LED Animation
+    if (nonBlockingDelay(ledTickMillis, 50))
+    {
+      rt.Step();
+    }
+
     // Tick countdown every second (non-blocking)
     if (nonBlockingDelay(countdownTickMillis, 1000))
     {
@@ -351,15 +412,18 @@ void executeState()
 
   case COMPLETE:
   {
+    ring.fill(ring.ColorHSV(4000L, 255, 50)); // Fill with Yellow color for complete indication
+    ring.show();
+
     // Blink 00:00 four times
     int blinkCount = 0;
     while (blinkCount < 4)
     {
-      digitalWrite(BuzzerPin, HIGH);
+      // digitalWrite(BuzzerPin, HIGH);
       display.showNumberDecEx(0, 0b01000000, true, 4, 0); // Show 00:00
       delay(500);
 
-      digitalWrite(BuzzerPin, LOW);
+      // digitalWrite(BuzzerPin, LOW);
       display.setSegments(onlyCollon); // Clear display
       delay(200);
       blinkCount++;
@@ -417,7 +481,18 @@ void setup()
 
   // Setup buzzer
   pinMode(BuzzerPin,  OUTPUT);
+
+  Serial.println("Setting up NeoPixels...");
+  // Setup NeoPixels
+  ring.begin(); // Initialize NeoPixel library
+  ring.show();  // Initialize all pixels to 'off'
+  Serial.println("NeoPixels setup complete.");
 }
+
+#define MAXHUE 256*6
+
+int position = 0;
+
 
 void loop()
 {
