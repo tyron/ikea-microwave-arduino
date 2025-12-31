@@ -1,5 +1,4 @@
 #include <Arduino.h>
-#include "hsv.h"
 
 #include <Keypad.h>
 #include <TM1637Display.h>
@@ -56,7 +55,48 @@ Keypad keypad = Keypad(makeKeymap(keys), rowPins, colPins, ROWS, COLS);
 // DS3231 RTC object
 uRTCLib rtc(0x68);
 
-Adafruit_NeoPixel pixels(NeoPixelCount, NeoPixelPin, NEO_GRB + NEO_KHZ800);
+// Rotator class based on https://www.arduinoslovakia.eu/blog/2021/10/neopixel-ring-rotator?lang=en
+// to create a rotating color pattern on the NeoPixel ring
+// for high-level orchestration of Rotating pattern
+// For more patterns or low-level code, reference https://github.com/RoboUlbricht/arduinoslovakia/blob/master/neopixel/hsv_red_circle_rotate/hsv_red_circle_rotate.ino
+class Rotator
+{
+    Adafruit_NeoPixel *strip;
+    int position;
+    uint16_t hue;
+    uint8_t saturation;
+
+  public:
+    Rotator(Adafruit_NeoPixel *npx, int pos = 0, uint16_t h = 0, uint8_t sat = 255);
+    void Step();
+};
+
+Rotator::Rotator(Adafruit_NeoPixel *npx, int pos, uint16_t h, uint8_t sat)
+  : strip(npx), position(pos), hue(h), saturation(sat)
+{
+}
+
+void Rotator::Step()
+{
+  // hue - 0-65535
+  // saturation - 0-255
+  // value - 0-255
+  for (int i = 0; i < NeoPixelCount; i++)
+    strip->setPixelColor(
+      (i + position) % NeoPixelCount,
+      strip->ColorHSV(hue, saturation, strip->gamma8(i * (255 / NeoPixelCount)))
+    );
+  strip->show();
+  position++;
+  position %= NeoPixelCount;
+}
+
+Adafruit_NeoPixel ring(NeoPixelCount, NeoPixelPin, NEO_GRB + NEO_KHZ800);
+
+// Rotator rt(&ring, 0, 0, 255); // red
+// Rotator rt(&ring, 0, 0, 200); // pink
+// Rotator rt(&ring, 0, 40000L, 200); // lightblue
+Rotator rt(&ring, 0, 4000L, 255); // yellow
 
 // ***** Variables *****
 
@@ -259,9 +299,8 @@ void handleInput()
 
           // Reset LED animation
           ledTickMillis = millis();
-          ledIndex = 0;
-          pixels.clear();
-          pixels.show();
+          ring.clear();
+          ring.show();
         }
       }
       else if (key == '*')
@@ -274,8 +313,8 @@ void handleInput()
         currentState = SHOW_CURRENT_TIME;
 
         // Restore LEDs
-        pixels.clear();
-        pixels.show();
+        ring.clear();
+        ring.show();
       }
       break;
 
@@ -289,8 +328,8 @@ void handleInput()
         display.setSegments(onlyCollon);
         currentState = SHOW_CURRENT_TIME;
 
-        pixels.clear();
-        pixels.show();
+        ring.clear();
+        ring.show();
       }
       break;
 
@@ -342,10 +381,7 @@ void executeState()
     // LED Animation
     if (nonBlockingDelay(ledTickMillis, 50))
     {
-      pixels.clear();
-      pixels.setPixelColor(ledIndex, pixels.Color(0, 150, 0));
-      pixels.show();
-      ledIndex = (ledIndex + 1) % NeoPixelCount;
+      rt.Step();
     }
 
     // Tick countdown every second (non-blocking)
@@ -381,8 +417,8 @@ void executeState()
         currentState = COMPLETE;
 
         // Restore LEDs
-        pixels.clear();
-        pixels.show();
+        ring.clear();
+        ring.show();
       }
     }
     break;
@@ -458,8 +494,8 @@ void setup()
 
   Serial.println("Setting up NeoPixels...");
   // Setup NeoPixels
-  pixels.begin(); // Initialize NeoPixel library
-  pixels.show();  // Initialize all pixels to 'off'
+  ring.begin(); // Initialize NeoPixel library
+  ring.show();  // Initialize all pixels to 'off'
   Serial.println("NeoPixels setup complete.");
 }
 
@@ -470,26 +506,6 @@ int position = 0;
 
 void loop()
 {
-  // Based on https://github.com/RoboUlbricht/arduinoslovakia/blob/master/neopixel/hsv_red_circle_rotate/hsv_red_circle_rotate.ino
-  for (int i = 0; i < NeoPixelCount; i++) {
-    // Rainbow
-    // pixels.setPixelColor((i + position) % CNT, getPixelColorHsv(i, i * (MAXHUE / CNT), 255, 10));
-    // Warm Yellow: Hue 192 (scale 0-1536), Saturation 255
-    pixels.setPixelColor((i + position) % NeoPixelCount, getPixelColorHsv(i, 125, 255, pixels.gamma8(i * (255 / NeoPixelCount))));
-  }
-  pixels.show();
-  position++;
-  position %= NeoPixelCount;
-  delay(50);
-
-  // generate a list of valuess 100, 200, 300, 400
-
-  // for (int i = 0; i < NeoPixelCount; i++) {
-  //   pixels.setPixelColor((i + position) % NeoPixelCount, getPixelColorHsv(i, 125, 255, pixels.gamma8(i * (255 / NeoPixelCount))));
-  // }
-  // pixels.show();
-  // delay(400);
-  
   // --- State Machine Implementation ---
   handleInput();
   executeState();
