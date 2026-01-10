@@ -122,6 +122,11 @@ unsigned long showCurrentTimeEntryMillis = 0; // Timer for SHOW_CURRENT_TIME sta
 int ledIndex = 0; // Current LED position
 String inputNumber = ""; // Variable to store the number sequence
 
+// COMPLETE state blink animation tracking
+unsigned long blinkTickMillis = 0; // Timer for blink animation
+int blinkCount = 0; // Counter for blink cycles
+bool buzzerOn = false; // Track buzzer state
+
 
 // DST calculation helper functions
 // Calculates the day of month for the Nth occurrence of a weekday
@@ -337,6 +342,8 @@ void handleInput()
 
     case COMPLETE:
       // Any key press exits complete state
+      digitalWrite(BuzzerPin, LOW);  // Ensure buzzer is off
+      buzzerOn = false;              // Reset buzzer state
       currentState = SHOW_CURRENT_TIME;
       showCurrentTimeEntryMillis = millis();
       break;
@@ -440,6 +447,10 @@ void executeState()
       if (timerMinutes == 0 && timerSeconds == 0)
       {
         currentState = COMPLETE;
+        // Initialize blink animation
+        blinkTickMillis = millis();
+        blinkCount = 0;
+        buzzerOn = false;  // Start with OFF so first iteration turns it ON
       }
     }
     break;
@@ -449,21 +460,34 @@ void executeState()
     ring.fill(ring.ColorHSV(4000L, 255, 50)); // Fill with Yellow color for complete indication
     ring.show();
 
-    // Blink 00:00 four times
-    int blinkCount = 0;
-    while (blinkCount < 4)
+    // Blink 00:00 four times using non-blocking delays
+    if (nonBlockingDelay(blinkTickMillis, buzzerOn ? 500 : 200))
     {
-      digitalWrite(BuzzerPin, HIGH);
-      display.showNumberDecEx(0, 0b01000000, true, 4, 0); // Show 00:00
-      delay(500);
+      if (buzzerOn)
+      {
+        // Turn off buzzer and show colon
+        digitalWrite(BuzzerPin, LOW);
+        display.setSegments(onlyCollon);
+        buzzerOn = false;
+        blinkCount++;  // Increment after each complete ON phase
+      }
+      else
+      {
+        // Turn on buzzer and show 00:00
+        digitalWrite(BuzzerPin, HIGH);
+        display.showNumberDecEx(0, 0b01000000, true, 4, 0);
+        buzzerOn = true;
+      }
 
-      digitalWrite(BuzzerPin, LOW);
-      display.setSegments(onlyCollon); // Clear display
-      delay(200);
-      blinkCount++;
+      // Check if blink sequence is complete
+      if (blinkCount >= 4)
+      {
+        digitalWrite(BuzzerPin, LOW);
+        blinkCount = 0;
+        currentState = SHOW_CURRENT_TIME;
+        showCurrentTimeEntryMillis = millis();
+      }
     }
-    currentState = SHOW_CURRENT_TIME;
-    showCurrentTimeEntryMillis = millis();
     break;
   }
   }
