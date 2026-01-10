@@ -107,7 +107,6 @@ Rotator rt(&ring, 0, 4000L, 255); // yellow
 enum State {
   SHOW_CURRENT_TIME,    // Display current time from RTC
   SHOW_CURRENT_TIME_NO_LED, // Display current time from RTC, no LEDs
-  WAITING_INPUT,        // Waiting for input (colon only)
   SETTING_TIMER,        // User is entering timer digits
   COUNTDOWN,            // Timer is actively counting down
   COMPLETE              // Timer finished, beeping/blinking
@@ -279,7 +278,6 @@ void handleInput()
     {
     case SHOW_CURRENT_TIME:
     case SHOW_CURRENT_TIME_NO_LED:
-    case WAITING_INPUT:
     case SETTING_TIMER:
       if (key >= '0' && key <= '9')
       {
@@ -397,11 +395,6 @@ void executeState()
       applyEasternTimeOffset(adjustedHour, adjustedDay, rtc.month(), rtc.year());
       displayCurrentTime(adjustedHour, rtc.minute(), rtc.second());
     }
-    break;
-
-  case WAITING_INPUT:
-    // Just show colon, waiting for input
-    display.setSegments(onlyCollon);
     break;
 
   case SETTING_TIMER:
