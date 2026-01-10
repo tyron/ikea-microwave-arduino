@@ -11,6 +11,8 @@
 // Definition of all digital pins
 
 // ***** Keypad input pins *****
+// Mapping https://learn.adafruit.com/matrix-keypad/pinouts
+// COL2, ROW1, COL1, ROW4, COL3, ROW3, ROW2
 const byte ROWS = 4; // four rows
 const byte COLS = 3; // three columns
 char keys[ROWS][COLS] = {
@@ -18,8 +20,8 @@ char keys[ROWS][COLS] = {
     {'4', '5', '6'},
     {'7', '8', '9'},
     {'*', '0', '#'}};
-byte rowPins[ROWS] = {8, 7, 6, 5}; // connect to the row pinouts of the keypad
-byte colPins[COLS] = {4, 3, 2};    // connect to the column pinouts of the keypad
+byte rowPins[ROWS] = {3, 8, 7, 5}; // connect to the row pinouts of the keypad
+byte colPins[COLS] = {4, 2, 6};    // connect to the column pinouts of the keypad
 
 // ***** Output pins *****
 // TM1637 clock pin
@@ -243,14 +245,17 @@ void updateDisplay(int minutes, int seconds)
 // Function to update the display in HH:MM format, blinking colon based on seconds
 void displayCurrentTime(int hours, int minutes, int seconds)
 {
+  // Convert to 12-hour format
+  int displayHours = (hours % 12 == 0) ? 12 : hours % 12;
+
   // concatenate hours and minutes for display
-  int displayTime = hours * 100 + minutes;
+  int displayTime = displayHours * 100 + minutes;
 
   // Define the bitmask for the colon. 0b01000000 is for the colon between digits 1 and 2.
   // To make it flash, you can toggle this value every second.
   uint8_t colonMask = (seconds % 2 == 0) ? 0x40 : 0;
 
-  display.showNumberDecEx(displayTime, colonMask, true, 4, 0);
+  display.showNumberDecEx(displayTime, colonMask, false, 4, 0);
 }
 
 // Handle input and state transitions
@@ -447,11 +452,11 @@ void executeState()
     int blinkCount = 0;
     while (blinkCount < 4)
     {
-      // digitalWrite(BuzzerPin, HIGH);
+      digitalWrite(BuzzerPin, HIGH);
       display.showNumberDecEx(0, 0b01000000, true, 4, 0); // Show 00:00
       delay(500);
 
-      // digitalWrite(BuzzerPin, LOW);
+      digitalWrite(BuzzerPin, LOW);
       display.setSegments(onlyCollon); // Clear display
       delay(200);
       blinkCount++;
@@ -493,7 +498,7 @@ void setup()
   // Following line sets the RTC with an explicit date & time
   // for example to set April 14 2025 at 12:56 you would call:
   // rtc.set(second, minute, hour, dayOfWeek, dayOfMonth, month, year)
-  // rtc.set(0, 43, 3, 1, 16, 11, 25);
+  // rtc.set(0, 18, 18, 2, 5, 1, 26);
   // set day of week (1=Sunday, 7=Saturday)
   Serial.println("Current RTC Date and Time (UTC):");
   rtc.refresh();
