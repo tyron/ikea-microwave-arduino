@@ -86,6 +86,7 @@ void Rotator::Step()
   for (int i = 0; i < NeoPixelCount; i++)
     strip->setPixelColor(
       (i + position) % NeoPixelCount,
+      // strip->ColorHSV(hue, saturation, strip->gamma8(pow(i, 2) * (255 / pow(NeoPixelCount, 2))))
       strip->ColorHSV(hue, saturation, strip->gamma8(i * (255 / NeoPixelCount)))
     );
   strip->show();
@@ -403,7 +404,7 @@ void executeState()
 
   case COUNTDOWN:
     // LED Animation
-    if (nonBlockingDelay(ledTickMillis, 50))
+    if (nonBlockingDelay(ledTickMillis, 75))
     {
       rt.Step();
     }
