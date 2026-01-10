@@ -1,6 +1,6 @@
-# CLAUDE.md
+# AGENTS.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance to AI agents (and human developers) when working with code in this repository.
 
 ## Project Overview
 
@@ -8,14 +8,17 @@ This is an Arduino-based microwave timer controller built with PlatformIO. The s
 - **4x3 matrix keypad** for user input (digits 0-9, * for cancel, # for start)
 - **TM1637 4-digit 7-segment display** (shows time in MM:SS format during countdown, HH:MM from RTC otherwise)
 - **DS3231 RTC module** for displaying current time when idle
-- **State machine architecture** with 5 states (SHOW_CURRENT_TIME, WAITING_INPUT, SETTING_TIMER, COUNTDOWN, COMPLETE)
+- **NeoPixel Ring (24 LED)** for visual feedback
+- **State machine architecture** with 5 states
 
 ## Hardware Pins
 
-- Display: CLK=11, DIO=10
-- Keypad rows: 9, 8, 7, 6
-- Keypad cols: 5, 4, 3
-- RTC: I2C at 0x68
+- **TM1637 Display**: CLK=9, DIO=10
+- **Keypad Rows**: 3, 8, 7, 5
+- **Keypad Cols**: 4, 2, 6
+- **Buzzer**: 11
+- **NeoPixel Data**: 13
+- **RTC**: I2C at 0x68 (SDA/SCL pins depend on board, usually A4/A5 on Uno)
 
 ## Build and Upload Commands
 
@@ -40,45 +43,60 @@ pio run --target clean
 
 ### State Machine Flow
 
-1. **SHOW_CURRENT_TIME**: Default state - displays current time from RTC with blinking colon
-2. **WAITING_INPUT**: Shows only colon, waiting for digit entry
-3. **SETTING_TIMER**: User entering 1-4 digits (MM:SS format, e.g., "130" → "1:30")
-4. **COUNTDOWN**: Timer actively counting down every second (non-blocking)
-5. **COMPLETE**: Timer finished - blinks "00:00" 4 times, then returns to SHOW_CURRENT_TIME
+The system operates in one of the following 5 states:
+
+1. **SHOW_CURRENT_TIME**: 
+   - **Behavior**: Displays current time (HH:MM) from RTC with blinking colon. NeoPixel ring shows standby color (Yellow).
+   - **Transitions**: 
+     - To `SHOW_CURRENT_TIME_NO_LED` after 15 seconds of inactivity.
+     - To `SETTING_TIMER` if a digit (0-9) is pressed.
+     - To `SHOW_CURRENT_TIME` (reset) if `*` is pressed.
+
+2. **SHOW_CURRENT_TIME_NO_LED**: 
+   - **Behavior**: Same as `SHOW_CURRENT_TIME` but NeoPixel ring is OFF.
+   - **Transitions**:
+     - To `SETTING_TIMER` if a digit (0-9) is pressed.
+     - To `SHOW_CURRENT_TIME` if `*` is pressed.
+
+3. **SETTING_TIMER**: 
+   - **Behavior**: User enters 1-4 digits. Display updates as "M:SS" or "MM:SS".
+   - **Transitions**:
+     - To `COUNTDOWN` if `#` is pressed and input > 0.
+     - To `SHOW_CURRENT_TIME` if `*` is pressed (Cancel).
+     - To `SHOW_CURRENT_TIME` if no input for 60 seconds (Timeout).
+
+4. **COUNTDOWN**: 
+   - **Behavior**: Timer actively counts down. Display shows "MM:SS". NeoPixel ring animates (rotating pattern).
+   - **Transitions**:
+     - To `COMPLETE` when timer reaches 00:00.
+     - To `SHOW_CURRENT_TIME_NO_LED` if `*` is pressed (Cancel).
+
+5. **COMPLETE**: 
+   - **Behavior**: Timer finished. Display blinks "00:00" and buzzer beeps 4 times. NeoPixel ring shows complete color (Yellow).
+   - **Transitions**:
+     - To `SHOW_CURRENT_TIME` after blink sequence finishes (approx 4 cycles).
+     - To `SHOW_CURRENT_TIME` immediately if any key is pressed.
 
 ### Key Implementation Details
 
-- **Non-blocking countdown**: Uses `nonBlockingDelay()` helper to tick every second without blocking `loop()`
-- **Input timeout**: Automatically resets to SHOW_CURRENT_TIME if no keypress for 60 seconds during SETTING_TIMER
-- **Input parsing**: Handles leading zeros correctly (e.g., "001" displays as "0:01", not "  :1")
-- **Input normalization**: Automatically converts seconds > 59 (e.g., "199" becomes 2:39)
-- **Cancel anytime**: Press `*` to cancel and return to showing current time
-- **RTC initialization**: Uncomment and modify `rtc.set()` in `setup()` to set initial date/time in UTC, then re-comment
-- **Automatic DST handling**: Clock automatically switches between EST (UTC-5) and EDT (UTC-4) based on US DST rules
-
-### Display Functions
-
-- `updateInputDisplay()`: Shows partial input with proper formatting and leading zeros during SETTING_TIMER
-- `updateDisplay()`: Shows MM:SS format during COUNTDOWN with leading zeros
-- `displayCurrentTime()`: Shows HH:MM from RTC with blinking colon based on seconds
-
-### Timezone & DST Functions
-
-- `getNthWeekdayOfMonth()`: Calculates which day of the month a specific weekday occurrence falls on (e.g., "2nd Sunday of March"). Uses Zeller's congruence algorithm for day-of-week calculations.
-- `isDST()`: Determines if DST is active based on US rules (2nd Sunday in March at 2:00 AM → 1st Sunday in November at 2:00 AM)
-- `applyEasternTimeOffset()`: Applies the correct UTC offset (-4 for EDT, -5 for EST) to convert UTC time to local Eastern time, handles day rollover
-- **RTC must be set to UTC time** for correct display. The code automatically applies EST/EDT offset based on the date.
+- **Non-blocking Execution**: Uses `nonBlockingDelay()` helper to manage timing for countdowns, animations, and timeouts without blocking `loop()`. Even the `COMPLETE` state blinking/beeping is non-blocking.
+- **Input Parsing**: Handles leading zeros correctly (e.g., "001" displays as "0:01").
+- **Input Normalization**: Automatically converts seconds > 59 (e.g., input "199" becomes 2:39).
+- **RTC & DST**: 
+  - `rtc.set()` in `setup()` can be used to set UTC time.
+  - `applyEasternTimeOffset()` automatically calculates EST/EDT based on US DST rules (2nd Sun March - 1st Sun Nov) to display local time.
+  - `getNthWeekdayOfMonth()` calculates dynamic DST transition dates.
 
 ## Dependencies
 
-All managed via PlatformIO (see [platformio.ini](platformio.ini)):
-- `chris--a/Keypad@^3.1.1`
-- `TM1637Display` (from GitHub)
-- `naguissa/uRTCLib@^6.9.6`
+Managed via PlatformIO:
+- `Keypad`
+- `TM1637Display`
+- `uRTCLib` (for DS3231)
+- `Adafruit NeoPixel`
 
 ## Development Notes
 
-- The entire application logic is in [src/main.cpp](src/main.cpp)
-- State transitions happen in `handleInput()`, state execution in `executeState()`
-- Serial output at 9600 baud logs key presses and countdown ticks for debugging
-- COMPLETE state uses blocking `delay()` for blink animation (acceptable as it's terminal state)
+- **Main Logic**: Located in `src/main.cpp`.
+- **State Handling**: `handleInput()` manages transitions; `executeState()` manages active behavior.
+- **Visuals**: `Rotator` class manages NeoPixel animations.
