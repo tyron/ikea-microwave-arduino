@@ -320,7 +320,7 @@ void handleInput()
         timerMinutes = 0;
         timerSeconds = 0;
         display.setSegments(onlyCollon);
-        currentState = SHOW_CURRENT_TIME;
+        currentState = (currentState == SHOW_CURRENT_TIME_NO_LED ? SHOW_CURRENT_TIME_NO_LED : SHOW_CURRENT_TIME);
         showCurrentTimeEntryMillis = millis();
       }
       break;
@@ -333,7 +333,7 @@ void handleInput()
         timerMinutes = 0;
         timerSeconds = 0;
         display.setSegments(onlyCollon);
-        currentState = SHOW_CURRENT_TIME;
+        currentState = SHOW_CURRENT_TIME_NO_LED;
         showCurrentTimeEntryMillis = millis();
       }
       break;
