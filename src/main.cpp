@@ -106,17 +106,16 @@ Rotator rt(&ring, 0, 4000L, 255); // yellow
 // State machine definitions
 enum State {
   SHOW_CURRENT_TIME,    // Display current time from RTC
-  SHOW_CURRENT_TIME_NO_LED, // Display current time from RTC, no LEDs
   SETTING_TIMER,        // User is entering timer digits
   COUNTDOWN,            // Timer is actively counting down
   COMPLETE              // Timer finished, beeping/blinking
 };
 
-State currentState = SHOW_CURRENT_TIME;
+State currentState;
 int timerMinutes = 0;           // countdown minutes
 int timerSeconds = 0;           // countdown seconds
 unsigned long countdownTickMillis = 0; // Timer for countdown ticks
-unsigned long ledTickMillis = 0; // Timer for LED animation
+unsigned long ledTickMillis = 0; // Timer for circular LED animation, controlling Step()
 unsigned long showCurrentTimeEntryMillis = 0; // Timer for SHOW_CURRENT_TIME state duration
 int ledIndex = 0; // Current LED position
 String inputNumber = ""; // Variable to store the number sequence
@@ -272,12 +271,11 @@ void handleInput()
   if (key)
   {
     lastKeyPressMillis = millis();
-    Serial.println("Key Pressed: " + String(key));
+    Serial.println("Key Pressed: " + String(key) + " in state " + String(currentState));
 
     switch (currentState)
     {
     case SHOW_CURRENT_TIME:
-    case SHOW_CURRENT_TIME_NO_LED:
     case SETTING_TIMER:
       if (key >= '0' && key <= '9')
       {
@@ -320,7 +318,7 @@ void handleInput()
         timerMinutes = 0;
         timerSeconds = 0;
         display.setSegments(onlyCollon);
-        currentState = (currentState == SHOW_CURRENT_TIME_NO_LED ? SHOW_CURRENT_TIME_NO_LED : SHOW_CURRENT_TIME);
+        currentState = SHOW_CURRENT_TIME;
         showCurrentTimeEntryMillis = millis();
       }
       break;
@@ -333,7 +331,7 @@ void handleInput()
         timerMinutes = 0;
         timerSeconds = 0;
         display.setSegments(onlyCollon);
-        currentState = SHOW_CURRENT_TIME_NO_LED;
+        currentState = SHOW_CURRENT_TIME;
         showCurrentTimeEntryMillis = millis();
       }
       break;
@@ -369,24 +367,9 @@ void executeState()
   case SHOW_CURRENT_TIME:
     if (nonBlockingDelay(showCurrentTimeEntryMillis, 15000)) // After 15 seconds, switch to no-LED mode
     {
-      currentState = SHOW_CURRENT_TIME_NO_LED;
+      ring.clear();
+      ring.show();
     }
-    
-    ring.fill(ring.ColorHSV(4000L, 255, 50)); // Fill with Yellow color for standby indication
-    ring.show();
-
-    rtc.refresh();
-    {
-      int adjustedHour = rtc.hour();
-      int adjustedDay = rtc.day();
-      applyEasternTimeOffset(adjustedHour, adjustedDay, rtc.month(), rtc.year());
-      displayCurrentTime(adjustedHour, rtc.minute(), rtc.second());
-    }
-    break;
-
-  case SHOW_CURRENT_TIME_NO_LED:
-    ring.clear();
-    ring.show();
 
     rtc.refresh();
     {
@@ -450,6 +433,7 @@ void executeState()
 
   case COMPLETE:
   {
+    Serial.println("On COMPLETE");
     ring.fill(ring.ColorHSV(4000L, 255, 50)); // Fill with Yellow color for complete indication
     ring.show();
 
