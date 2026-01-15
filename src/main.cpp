@@ -117,6 +117,8 @@ int timerSeconds = 0;           // countdown seconds
 unsigned long countdownTickMillis = 0; // Timer for countdown ticks
 unsigned long ledTickMillis = 0; // Timer for circular LED animation, controlling Step()
 unsigned long showCurrentTimeEntryMillis = 0; // Timer for SHOW_CURRENT_TIME state duration
+unsigned long ledDurationTimer = 0; 
+bool ledTimerActive = false;
 int ledIndex = 0; // Current LED position
 String inputNumber = ""; // Variable to store the number sequence
 
@@ -333,6 +335,8 @@ void handleInput()
         display.setSegments(onlyCollon);
         currentState = SHOW_CURRENT_TIME;
         showCurrentTimeEntryMillis = millis();
+        ledDurationTimer = millis();
+        ledTimerActive = true;
       }
       break;
 
@@ -365,10 +369,11 @@ void executeState()
   switch (currentState)
   {
   case SHOW_CURRENT_TIME:
-    if (nonBlockingDelay(showCurrentTimeEntryMillis, 15000)) // After 15 seconds, switch to no-LED mode
+    if (ledTimerActive && nonBlockingDelay(ledDurationTimer, 15000)) // After 15 seconds, switch to no-LED mode
     {
       ring.clear();
       ring.show();
+      ledTimerActive = false;
     }
 
     rtc.refresh();
@@ -433,7 +438,6 @@ void executeState()
 
   case COMPLETE:
   {
-    Serial.println("On COMPLETE");
     ring.fill(ring.ColorHSV(4000L, 255, 50)); // Fill with Yellow color for complete indication
     ring.show();
 
@@ -463,6 +467,8 @@ void executeState()
         blinkCount = 0;
         currentState = SHOW_CURRENT_TIME;
         showCurrentTimeEntryMillis = millis();
+        ledDurationTimer = millis();
+        ledTimerActive = true;
       }
     }
     break;
